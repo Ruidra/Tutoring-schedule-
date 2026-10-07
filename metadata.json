@@ -1,0 +1,6 @@
+{
+  "name": "Tuition Routine",
+  "description": "Smart tuition schedule planner with next-class countdown, weekly matrix, teacher directory, and reminder notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
