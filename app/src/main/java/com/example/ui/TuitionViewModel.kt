@@ -8,6 +8,7 @@ import com.example.data.db.TuitionDatabase
 import com.example.data.model.Teacher
 import com.example.data.model.TuitionClass
 import com.example.data.repository.TuitionRepository
+import com.example.util.AlarmSoundPlayer
 import com.example.util.NextClassInfo
 import com.example.util.NotificationHelper
 import com.example.util.TimeUtil
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -35,7 +35,8 @@ data class ActiveAlarmItem(
     val teacher: Teacher?,
     val triggerTimeMillis: Long,
     val classStartMillis: Long,
-    val classEndMillis: Long
+    val classEndMillis: Long,
+    val ringingStartedMillis: Long = System.currentTimeMillis()
 )
 
 class TuitionViewModel(application: Application) : AndroidViewModel(application) {
@@ -86,6 +87,9 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
     private val _activeAlarms = MutableStateFlow<List<ActiveAlarmItem>>(emptyList())
     val activeAlarms = _activeAlarms.asStateFlow()
 
+    private val _isTestAlarmRinging = MutableStateFlow(false)
+    val isTestAlarmRinging = _isTestAlarmRinging.asStateFlow()
+
     private val firedAlarmsKeys = mutableSetOf<String>()
     private val snoozedAlarms = mutableMapOf<String, Long>()
 
@@ -131,7 +135,7 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
             subject = "",
             teacherId = null,
             note = "",
-            remindMinutes = 30
+            remindMinutes = 30 // Default 30 min before class
         )
         _isCreatingNewClass.value = true
     }
@@ -161,7 +165,7 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
             repository.saveClass(validated)
             _editingClass.value = null
             _isCreatingNewClass.value = false
-            showStatus("Class saved")
+            showStatus("Class saved with ${validated.remindMinutes}m reminder")
             updateNextClass()
         }
     }
@@ -224,29 +228,67 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
     fun toggleReminders() {
         val current = remindersEnabled.value
         repository.setRemindersEnabled(!current)
+        if (current) {
+            // Turning off: stop all ringing alarms
+            stopAllAlarms()
+        }
         showStatus(if (!current) "Reminders turned on" else "Reminders turned off")
     }
 
-    fun testAlarm(context: Context) {
+    /**
+     * Test the loud alarm sound (wake up sound) directly.
+     */
+    fun startTestAlarm(context: Context) {
+        _isTestAlarmRinging.value = true
+        AlarmSoundPlayer.startLoudAlarm(context)
         NotificationHelper.showTestNotification(context)
-        showStatus("Test reminder triggered with sound & vibration")
+        showStatus("Loud alarm test started! Tap 'Stop' to silence.")
     }
 
+    fun stopTestAlarm(context: Context) {
+        _isTestAlarmRinging.value = false
+        AlarmSoundPlayer.stopAlarm(context)
+        showStatus("Alarm test stopped.")
+    }
+
+    /**
+     * User taps "STOP ALARM" (I'm awake!):
+     * Completely stops sound and silences alarm permanently for this session.
+     */
     fun dismissAlarm(key: String) {
         _activeAlarms.value = _activeAlarms.value.filter { it.key != key }
+        snoozedAlarms.remove(key)
+        if (_activeAlarms.value.isEmpty() && !_isTestAlarmRinging.value) {
+            AlarmSoundPlayer.stopAlarm(getApplication())
+        }
+        showStatus("Alarm stopped. You are on time!")
     }
 
+    /**
+     * User taps "SNOOZE 5 MIN":
+     * Stops sound now, rings again after a 5 min gap.
+     */
     fun snoozeAlarm(key: String) {
         val now = System.currentTimeMillis()
         snoozedAlarms[key] = now + 5 * 60 * 1000 // 5 minutes
         _activeAlarms.value = _activeAlarms.value.filter { it.key != key }
-        showStatus("Will remind again in 5 minutes")
+        if (_activeAlarms.value.isEmpty() && !_isTestAlarmRinging.value) {
+            AlarmSoundPlayer.stopAlarm(getApplication())
+        }
+        showStatus("Alarm snoozed. Will ring again in 5 minutes.")
+    }
+
+    private fun stopAllAlarms() {
+        _activeAlarms.value = emptyList()
+        snoozedAlarms.clear()
+        _isTestAlarmRinging.value = false
+        AlarmSoundPlayer.stopAlarm(getApplication())
     }
 
     fun resetToDemoData() {
         viewModelScope.launch {
             repository.seedSampleData()
-            showStatus("Demo schedule loaded")
+            showStatus("Demo schedule loaded with 30m reminders")
             updateNextClass()
         }
     }
@@ -261,7 +303,10 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
 
     private fun checkAlarms() {
         if (!remindersEnabled.value) {
-            _activeAlarms.value = emptyList()
+            if (_activeAlarms.value.isNotEmpty()) {
+                _activeAlarms.value = emptyList()
+                AlarmSoundPlayer.stopAlarm(getApplication())
+            }
             return
         }
 
@@ -272,8 +317,31 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
         val currentClasses = classes.value
         val teacherMap = teachers.value.associateBy { it.id }
 
-        val newAlarms = _activeAlarms.value.toMutableList()
+        val activeList = _activeAlarms.value.toMutableList()
 
+        // 1. Check auto-snooze for existing ringing alarms:
+        // If an alarm has been ringing for >= 60 seconds without the user stopping it,
+        // automatically snooze it for 5 minutes and stop the audio during the gap!
+        val it = activeList.iterator()
+        var autoSnoozeTriggered = false
+        while (it.hasNext()) {
+            val alarm = it.next()
+            if (nowMillis - alarm.ringingStartedMillis >= 60 * 1000L) {
+                // Not stopped by user -> Alarm after 5 min gap!
+                snoozedAlarms[alarm.key] = nowMillis + 5 * 60 * 1000L
+                it.remove()
+                autoSnoozeTriggered = true
+            }
+        }
+        if (autoSnoozeTriggered) {
+            _activeAlarms.value = activeList
+            if (activeList.isEmpty() && !_isTestAlarmRinging.value) {
+                AlarmSoundPlayer.stopAlarm(getApplication())
+                showStatus("Alarm not stopped: Paused for 5 min gap, will ring again!")
+            }
+        }
+
+        // 2. Check scheduled and snoozed alarms for Today and Tomorrow
         for (offset in 0..1) {
             val checkDay = (currentDay + offset) % 7
             val checkClasses = currentClasses.filter { it.day == checkDay && it.remindMinutes > 0 }
@@ -303,20 +371,33 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
                 val reminderMillis = startMillis - (c.remindMinutes * 60 * 1000L)
                 val alarmKey = "${c.id}_${startMillis}_${c.remindMinutes}"
 
-                // Check snooze
+                // Check if snoozed alarm time has arrived (5 min gap elapsed)
                 val snoozeUntil = snoozedAlarms[alarmKey]
                 if (snoozeUntil != null && nowMillis >= snoozeUntil && nowMillis < startMillis) {
                     snoozedAlarms.remove(alarmKey)
-                    if (newAlarms.none { it.key == alarmKey }) {
-                        newAlarms.add(
+                    if (activeList.none { it.key == alarmKey }) {
+                        activeList.add(
                             ActiveAlarmItem(
                                 key = alarmKey,
                                 tuitionClass = c,
                                 teacher = teacherMap[c.teacherId],
                                 triggerTimeMillis = nowMillis,
                                 classStartMillis = startMillis,
-                                classEndMillis = endMillis
+                                classEndMillis = endMillis,
+                                ringingStartedMillis = nowMillis
                             )
+                        )
+                        // Trigger loud sound again
+                        AlarmSoundPlayer.startLoudAlarm(getApplication())
+                        val teacher = teacherMap[c.teacherId]
+                        val remainingMins = ((startMillis - nowMillis) / 60000).toInt().coerceAtLeast(1)
+                        NotificationHelper.showClassReminder(
+                            context = getApplication(),
+                            subject = c.subject,
+                            startTime = TimeUtil.format12HourString(c.start),
+                            teacherName = teacher?.name,
+                            address = teacher?.address,
+                            minutesUntilStart = remainingMins
                         )
                     }
                 }
@@ -325,6 +406,8 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
                 if (nowMillis in reminderMillis until startMillis && !firedAlarmsKeys.contains(alarmKey)) {
                     firedAlarmsKeys.add(alarmKey)
                     val teacher = teacherMap[c.teacherId]
+
+                    // Send high-priority notification with sound
                     NotificationHelper.showClassReminder(
                         context = getApplication(),
                         subject = c.subject,
@@ -334,15 +417,19 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
                         minutesUntilStart = c.remindMinutes
                     )
 
-                    if (newAlarms.none { it.key == alarmKey }) {
-                        newAlarms.add(
+                    // Start continuous loud alarm sound so user wakes up
+                    AlarmSoundPlayer.startLoudAlarm(getApplication())
+
+                    if (activeList.none { it.key == alarmKey }) {
+                        activeList.add(
                             ActiveAlarmItem(
                                 key = alarmKey,
                                 tuitionClass = c,
                                 teacher = teacher,
                                 triggerTimeMillis = reminderMillis,
                                 classStartMillis = startMillis,
-                                classEndMillis = endMillis
+                                classEndMillis = endMillis,
+                                ringingStartedMillis = nowMillis
                             )
                         )
                     }
@@ -351,8 +438,15 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
         }
 
         // Clean up alarms whose class has ended
-        newAlarms.removeAll { nowMillis >= it.classEndMillis }
-        _activeAlarms.value = newAlarms
+        val endedAlarms = activeList.filter { nowMillis >= it.classEndMillis }
+        if (endedAlarms.isNotEmpty()) {
+            activeList.removeAll(endedAlarms)
+            if (activeList.isEmpty() && !_isTestAlarmRinging.value) {
+                AlarmSoundPlayer.stopAlarm(getApplication())
+            }
+        }
+
+        _activeAlarms.value = activeList
     }
 
     private fun showStatus(msg: String) {
@@ -363,5 +457,10 @@ class TuitionViewModel(application: Application) : AndroidViewModel(application)
                 _statusMessage.value = null
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        AlarmSoundPlayer.stopAlarm(getApplication())
     }
 }

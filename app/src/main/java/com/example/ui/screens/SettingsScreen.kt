@@ -21,14 +21,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -40,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +58,9 @@ import com.example.util.TimeUtil
 fun SettingsScreen(
     remindersEnabled: Boolean,
     onToggleReminders: () -> Unit,
-    onTestAlarm: () -> Unit,
+    isTestAlarmRinging: Boolean,
+    onStartTestAlarm: () -> Unit,
+    onStopTestAlarm: () -> Unit,
     themeMode: String,
     onSetThemeMode: (String) -> Unit,
     onPreloadDemo: () -> Unit,
@@ -70,7 +75,7 @@ fun SettingsScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            onTestAlarm()
+            onStartTestAlarm()
         }
     }
 
@@ -82,13 +87,13 @@ fun SettingsScreen(
     ) {
         // Section title
         Text(
-            text = "Settings",
+            text = "Settings & Alarm",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = colors.ink
         )
 
-        // 1. Reminders & Alarms Section
+        // 1. Reminders & Wake-Up Alarms Section
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -109,7 +114,7 @@ fun SettingsScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                                 .background(colors.today),
                             contentAlignment = Alignment.Center
@@ -118,19 +123,19 @@ fun SettingsScreen(
                                 imageVector = Icons.Default.NotificationsActive,
                                 contentDescription = null,
                                 tint = colors.accent,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
 
                         Column {
                             Text(
-                                text = "Class Reminders",
+                                text = "Loud Tuition Alarms",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = colors.ink
                             )
                             Text(
-                                text = if (remindersEnabled) "Active · Notifications will alert you" else "Turned off",
+                                text = if (remindersEnabled) "Active · Rings with loud sound" else "Turned off",
                                 fontSize = 12.sp,
                                 color = colors.muted
                             )
@@ -150,40 +155,100 @@ fun SettingsScreen(
                     )
                 }
 
-                Text(
-                    text = "Alarms ring according to each class's reminder time (e.g. 30 min before). Tap 'Test alarm' to verify sound and notification delivery.",
-                    fontSize = 12.sp,
-                    color = colors.muted,
-                    lineHeight = 16.sp
-                )
+                // Feature details card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.field)
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "⏰ How Wake-Up Alarms Work:",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.ink
+                        )
+                        Text(
+                            text = "• Rings 30 min (editable per class) before your private tuition.",
+                            fontSize = 12.sp,
+                            color = colors.muted
+                        )
+                        Text(
+                            text = "• Plays loud sound & vibration so you wake up and don't get late.",
+                            fontSize = 12.sp,
+                            color = colors.muted
+                        )
+                        Text(
+                            text = "• If you tap 'Stop Alarm', it silences immediately.",
+                            fontSize = 12.sp,
+                            color = colors.muted
+                        )
+                        Text(
+                            text = "• If not stopped, it pauses and rings again after a 5 min gap!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.accent
+                        )
+                    }
+                }
 
+                // Test Alarm button (Starts or Stops loud sound)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                onTestAlarm()
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag("btn_test_alarm")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Test Alarm & Sound",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.accent
-                        )
+                    if (isTestAlarmRinging) {
+                        Button(
+                            onClick = onStopTestAlarm,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.danger,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.testTag("btn_stop_test_alarm")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.StopCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "STOP LOUD SOUND",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    onStartTestAlarm()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.accent,
+                                contentColor = colors.accentInk
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.testTag("btn_test_alarm")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "TEST LOUD ALARM SOUND",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -200,7 +265,7 @@ fun SettingsScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Appearance & Theme",
+                    text = "Appearance & Dark Mode",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.ink
@@ -280,7 +345,7 @@ fun SettingsScreen(
                                     dayClasses.forEach { c ->
                                         val tName = teacherMap[c.teacherId]?.name ?: "No teacher"
                                         val tTime = "${TimeUtil.format12HourString(c.start)} - ${TimeUtil.format12HourString(c.end)}"
-                                        appendLine(" • ${c.subject} ($tTime) - $tName")
+                                        appendLine(" • ${c.subject} ($tTime) - $tName [Alarm: ${c.remindMinutes}m before]")
                                     }
                                 }
                             }
@@ -326,7 +391,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Reset / Preload Demo Schedule",
+                        text = "Reset / Preload Demo Schedule (with 30m Alarms)",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.ink
@@ -361,7 +426,7 @@ fun SettingsScreen(
                         color = colors.ink
                     )
                     Text(
-                        text = "All data is securely stored locally on this device. You can access your full schedule offline anytime.",
+                        text = "All data and alarm schedules are stored locally on this device. You will never be late for private tuition.",
                         fontSize = 12.sp,
                         color = colors.muted,
                         lineHeight = 16.sp

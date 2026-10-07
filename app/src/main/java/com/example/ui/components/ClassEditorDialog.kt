@@ -338,20 +338,33 @@ fun ClassEditorDialog(
                 }
 
                 // Reminder Presets
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "REMIND BEFORE CLASS",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        color = colors.muted
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "LOUD WAKE-UP ALARM",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            color = colors.muted
+                        )
+                        Text(
+                            text = if (remindMinutes == 0) "Off" else "$remindMinutes min before",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (remindMinutes == 0) colors.muted else colors.accent
+                        )
+                    }
 
+                    // Presets Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(0, 15, 30, 45, 60).forEach { mins ->
+                        listOf(0, 15, 20, 30, 45, 60).forEach { mins ->
                             val isSelected = remindMinutes == mins
                             Box(
                                 modifier = Modifier
@@ -364,14 +377,73 @@ fun ClassEditorDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (mins == 0) "Off" else "${mins}m",
-                                    fontSize = 12.sp,
+                                    text = when (mins) {
+                                        0 -> "Off"
+                                        30 -> "30m"
+                                        else -> "${mins}m"
+                                    },
+                                    fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isSelected) colors.accentInk else colors.ink
                                 )
                             }
                         }
                     }
+
+                    // Custom minutes adjustments
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.field)
+                                .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    remindMinutes = (remindMinutes - 5).coerceAtLeast(0)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("- 5 min", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.ink)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.field)
+                                .border(1.dp, colors.line, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    remindMinutes = (remindMinutes + 5).coerceAtMost(180)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("+ 5 min", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.ink)
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        if (remindMinutes != 30) {
+                            Text(
+                                text = "Reset to 30m",
+                                fontSize = 12.sp,
+                                color = colors.accent,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clickable { remindMinutes = 30 }
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = if (remindMinutes > 0)
+                            "🔊 Loud alarm will wake you up $remindMinutes min before this tuition. If not stopped, it will ring again after a 5 min gap."
+                        else
+                            "🔕 No alarm will sound for this class.",
+                        fontSize = 11.sp,
+                        color = colors.muted,
+                        lineHeight = 15.sp
+                    )
                 }
 
                 // Note

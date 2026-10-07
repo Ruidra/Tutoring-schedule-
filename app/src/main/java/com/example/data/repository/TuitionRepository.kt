@@ -117,7 +117,7 @@ class TuitionRepository(
                 subject = "Higher Math",
                 teacherId = teacher3.id,
                 note = "Calculus integration problem set #4",
-                remindMinutes = 20
+                remindMinutes = 30
             ),
             // Monday (day = 1)
             TuitionClass(
@@ -136,7 +136,7 @@ class TuitionRepository(
                 subject = "Biology",
                 teacherId = null,
                 note = "Genetics & DNA replication notes",
-                remindMinutes = 15
+                remindMinutes = 30
             ),
             // Tuesday (day = 2)
             TuitionClass(
@@ -165,7 +165,7 @@ class TuitionRepository(
                 subject = "ICT",
                 teacherId = null,
                 note = "HTML, CSS & logic gates chapter",
-                remindMinutes = 15
+                remindMinutes = 30
             ),
             // Thursday (day = 4)
             TuitionClass(

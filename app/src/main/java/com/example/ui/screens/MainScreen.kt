@@ -76,6 +76,7 @@ fun MainScreen(
     val nextClassInfo by viewModel.nextClassInfo.collectAsState()
     val activeAlarms by viewModel.activeAlarms.collectAsState()
     val remindersEnabled by viewModel.remindersEnabled.collectAsState()
+    val isTestAlarmRinging by viewModel.isTestAlarmRinging.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
 
@@ -304,7 +305,9 @@ fun MainScreen(
                             SettingsScreen(
                                 remindersEnabled = remindersEnabled,
                                 onToggleReminders = { viewModel.toggleReminders() },
-                                onTestAlarm = { viewModel.testAlarm(context) },
+                                isTestAlarmRinging = isTestAlarmRinging,
+                                onStartTestAlarm = { viewModel.startTestAlarm(context) },
+                                onStopTestAlarm = { viewModel.stopTestAlarm(context) },
                                 themeMode = themeMode,
                                 onSetThemeMode = { viewModel.setThemeMode(it) },
                                 onPreloadDemo = { viewModel.resetToDemoData() },

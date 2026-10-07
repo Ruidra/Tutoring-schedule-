@@ -290,6 +290,21 @@ fun HeroNextClassCard(
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+
+                // Alarm reminder status
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = if (nextClassInfo.tuitionClass.remindMinutes > 0)
+                            "⏰ Loud alarm rings ${nextClassInfo.tuitionClass.remindMinutes}m before class"
+                        else
+                            "🔕 Alarm off for this class",
+                        fontSize = 12.sp,
+                        color = colors.heroMuted
+                    )
+                }
             }
         }
     }
